@@ -629,91 +629,165 @@ function Controls({
   pulseScale: number;
   setPulseScale: (value: number) => void;
 }) {
+  const [isExpanded, setIsExpanded] = useState(true);
+
   return (
     <div
       style={{
         position: "fixed",
-        right: "20px",
-        top: "20px",
-        background: "rgba(0,0,0,0.7)",
-        padding: "20px",
-        borderRadius: "10px",
+        right: "0",
+        top: "0",
+        background: "rgba(0,0,0,0.85)",
         color: "white",
-        fontFamily: "sans-serif",
-        width: "200px",
+        fontFamily: "system-ui, -apple-system, sans-serif",
         zIndex: 1000,
+        width: isExpanded ? "min(100%, 300px)" : "auto",
+        height: "auto",
+        maxHeight: "100vh",
+        overflowY: "auto",
+        transition: "all 0.3s ease",
+        WebkitOverflowScrolling: "touch", // For smooth scrolling on iOS
       }}
     >
-      <div style={{ marginBottom: "15px" }}>
-        <label style={{ display: "block", marginBottom: "5px" }}>
-          Size: {size.toFixed(1)}
+      {/* Toggle Button */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        style={{
+          position: "relative",
+          width: "100%",
+          padding: "15px",
+          background: "rgba(255,255,255,0.1)",
+          border: "none",
+          color: "white",
+          fontSize: "16px",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "8px",
+        }}
+      >
+        {isExpanded ? "Hide Controls ▼" : "Show Controls ▲"}
+      </button>
+
+      {/* Controls Panel */}
+      {isExpanded && (
+        <div style={{ padding: "20px" }}>
+          <ControlSlider
+            label="Size"
+            value={size}
+            onChange={setSize}
+            min={4}
+            max={8}
+            step={0.1}
+            formatValue={(v) => v.toFixed(1)}
+          />
+          <ControlSlider
+            label="Amplitude"
+            value={amplitudeFactor}
+            onChange={setAmplitudeFactor}
+            min={0.1}
+            max={5}
+            step={0.01}
+            formatValue={(v) => v.toFixed(2)}
+          />
+          <ControlSlider
+            label="Audio Response"
+            value={audioFactor}
+            onChange={setAudioFactor}
+            min={0.05}
+            max={3}
+            step={0.01}
+            formatValue={(v) => v.toFixed(2)}
+          />
+          <ControlSlider
+            label="Speed"
+            value={speedFactor}
+            onChange={setSpeedFactor}
+            min={0.01}
+            max={3}
+            step={0.01}
+            formatValue={(v) => v.toFixed(3)}
+          />
+          <ControlSlider
+            label="Pulse"
+            value={pulseScale}
+            onChange={setPulseScale}
+            min={0}
+            max={5}
+            step={0.01}
+            formatValue={(v) => v.toFixed(2)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Helper component for consistent slider styling
+function ControlSlider({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  formatValue,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  min: number;
+  max: number;
+  step: number;
+  formatValue: (value: number) => string;
+}) {
+  return (
+    <div style={{ marginBottom: "24px" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "8px",
+        }}
+      >
+        <label
+          style={{
+            fontSize: "16px",
+            fontWeight: "500",
+          }}
+        >
+          {label}
         </label>
-        <input
-          type="range"
-          min="4"
-          max="8"
-          step="0.1"
-          value={size}
-          onChange={(e) => setSize(Number(e.target.value))}
-          style={{ width: "100%" }}
-        />
+        <span
+          style={{
+            fontSize: "14px",
+            opacity: 0.8,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {formatValue(value)}
+        </span>
       </div>
-      <div style={{ marginBottom: "15px" }}>
-        <label style={{ display: "block", marginBottom: "5px" }}>
-          Amplitude: {amplitudeFactor.toFixed(2)}
-        </label>
-        <input
-          type="range"
-          min="0.1"
-          max="5"
-          step="0.01"
-          value={amplitudeFactor}
-          onChange={(e) => setAmplitudeFactor(Number(e.target.value))}
-          style={{ width: "100%" }}
-        />
-      </div>
-      <div style={{ marginBottom: "15px" }}>
-        <label style={{ display: "block", marginBottom: "5px" }}>
-          Audio Response: {audioFactor.toFixed(2)}
-        </label>
-        <input
-          type="range"
-          min="0.05"
-          max="3"
-          step="0.01"
-          value={audioFactor}
-          onChange={(e) => setAudioFactor(Number(e.target.value))}
-          style={{ width: "100%" }}
-        />
-      </div>
-      <div style={{ marginBottom: "15px" }}>
-        <label style={{ display: "block", marginBottom: "5px" }}>
-          Speed: {speedFactor.toFixed(3)}
-        </label>
-        <input
-          type="range"
-          min="0.01"
-          max="3"
-          step="0.01"
-          value={speedFactor}
-          onChange={(e) => setSpeedFactor(Number(e.target.value))}
-          style={{ width: "100%" }}
-        />
-      </div>
-      <div style={{ marginBottom: "15px" }}>
-        <label style={{ display: "block", marginBottom: "5px" }}>
-          Pulse: {pulseScale.toFixed(2)}
-        </label>
-        <input
-          type="range"
-          min="0"
-          max="5"
-          step="0.01"
-          value={pulseScale}
-          onChange={(e) => setPulseScale(Number(e.target.value))}
-          style={{ width: "100%" }}
-        />
-      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{
+          width: "100%",
+          height: "36px", // Increased height for better touch targets
+          margin: 0,
+          cursor: "pointer",
+          WebkitAppearance: "none",
+          background: "rgba(255,255,255,0.1)",
+          borderRadius: "8px",
+          padding: "0 2px",
+        }}
+      />
     </div>
   );
 }
