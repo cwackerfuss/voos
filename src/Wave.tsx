@@ -83,11 +83,15 @@ const GradientFillMaterial = shaderMaterial(
 // Register the material
 extend({ GradientFillMaterial });
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      gradientFillMaterial: any;
-    }
+// Register the materials
+extend({ GradientMaterial, GradientFillMaterial });
+
+// Add type declarations for Three.js materials
+declare module "@react-three/fiber" {
+  interface ThreeElements {
+    gradientMaterial: any;
+    gradientFillMaterial: any;
+    lineBasicMaterial: any;
   }
 }
 
@@ -183,13 +187,6 @@ interface WaveformProps {
   }[];
 
   /**
-   * How much the audio affects the animation speed
-   * @default 0.5
-   * @range 0-2.0 (recommended)
-   */
-  speedScale?: number;
-
-  /**
    * Controls how quickly the waveform responds to increasing audio levels
    * Multiplied with the base smoothingFactor
    * @default 2.0
@@ -217,6 +214,13 @@ interface WaveformProps {
    * @range 0-1.0 (recommended)
    */
   pulseScale?: number;
+
+  /**
+   * How much the audio affects the animation speed
+   * @default 0.5
+   * @range 0-2.0 (recommended)
+   */
+  speedScale?: number;
 }
 
 function FilledWaveform({
@@ -243,7 +247,6 @@ function FilledWaveform({
   const rotationDirections = useRef(
     undulationPattern.map(() => (Math.random() > 0.5 ? 1 : -1))
   );
-  const previousAudioLevel = useRef(0);
 
   const positions = useMemo(() => {
     // Double the points to include center vertices
@@ -279,8 +282,11 @@ function FilledWaveform({
     // Reduce the audio amplification
     const audioAmplification = 1 + (averageAudio / 128) * 2;
 
-    // Clamp the speed multiplier to prevent extreme values
-    const targetSpeedMultiplier = Math.min(2.0, 1 + (averageAudio / 128) * 0.2);
+    // Update to use speedScale prop instead of hardcoded value
+    const targetSpeedMultiplier = Math.min(
+      2.0,
+      1 + (averageAudio / 128) * speedScale
+    );
 
     // Smooth the speed transition more gradually
     previousSpeedMultiplier.current +=
@@ -408,7 +414,6 @@ function OutlineWaveform({
   opacity = 0.8,
   smoothingFactor = 0.1,
   audioScale = 0.8,
-  speedScale = 0.5,
   pulseScale = 0.2,
   increaseResponseRate = 2.0,
   decreaseResponseRate = 0.5,
@@ -456,19 +461,17 @@ function OutlineWaveform({
     // Reduce the audio amplification slightly
     const audioAmplification = 1 + (averageAudio / 128) * 2;
 
-    // Determine if audio is increasing or decreasing
+    // Ensure previousAudioLevel is used in the audio level comparison
     const isIncreasing = averageAudio > previousAudioLevel.current;
     const dynamicSmoothingFactor = isIncreasing
       ? Math.min(0.08, smoothingFactor * increaseResponseRate)
       : Math.min(0.04, smoothingFactor * decreaseResponseRate);
 
+    // Update the previous audio level
     previousAudioLevel.current = averageAudio;
 
     // Clamp and smooth the speed multiplier
-    const targetSpeedMultiplier = Math.min(
-      2.0,
-      1 + (averageAudio / 128) * speedScale
-    );
+    const targetSpeedMultiplier = Math.min(2.0, 1 + (averageAudio / 128) * 0.5);
 
     previousSpeedMultiplier.current +=
       (targetSpeedMultiplier - previousSpeedMultiplier.current) *
@@ -714,7 +717,6 @@ function AudioWaveform({
         opacity={1}
         smoothingFactor={0.15}
         audioScale={audioFactor * 2}
-        speedScale={speedFactor * 1}
         pulseScale={pulseScale}
         undulationPattern={[
           { frequency: 3, amplitude: amplitudeFactor * 0.3, speed: 1.6 },
@@ -745,7 +747,6 @@ function AudioWaveform({
         opacity={0.5}
         smoothingFactor={0.1}
         audioScale={audioFactor * 2.5}
-        speedScale={speedFactor * 0.75}
         pulseScale={pulseScale}
         undulationPattern={[
           { frequency: 2, amplitude: amplitudeFactor * 0.3, speed: 1.5 },
@@ -776,7 +777,6 @@ function AudioWaveform({
         opacity={0.25}
         smoothingFactor={0.08}
         audioScale={audioFactor * 1.75}
-        speedScale={speedFactor * 0.9}
         pulseScale={pulseScale}
         undulationPattern={[
           { frequency: 2, amplitude: amplitudeFactor * 0.25, speed: 1.2 },
