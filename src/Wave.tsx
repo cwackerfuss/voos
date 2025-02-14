@@ -51,7 +51,6 @@ const GradientFillMaterial = shaderMaterial(
     color2: new THREE.Color(0.0, 0.0, 0.0),
     opacity: 0.0,
     time: 0.0,
-    audioLevel: 0.0,
   },
   // Vertex shader
   `
@@ -63,84 +62,55 @@ const GradientFillMaterial = shaderMaterial(
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
   `,
-  // Updated fragment shader with smoother transitions
+  // Updated fragment shader with more interesting gradient patterns
   `
     uniform vec3 color1;
     uniform vec3 color2;
     uniform float opacity;
     uniform float time;
-    uniform float audioLevel;
     varying vec2 vUv;
     varying vec3 vPosition;
 
+    // Noise function for more organic patterns
     float noise(vec2 p) {
       return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
     }
 
-    // Smooth noise function
-    float smoothNoise(vec2 p) {
-      vec2 i = floor(p);
-      vec2 f = fract(p);
-      
-      // Smoothstep for better interpolation
-      f = f * f * (3.0 - 2.0 * f);
-      
-      float a = noise(i);
-      float b = noise(i + vec2(1.0, 0.0));
-      float c = noise(i + vec2(0.0, 1.0));
-      float d = noise(i + vec2(1.0, 1.0));
-      
-      return mix(
-        mix(a, b, f.x),
-        mix(c, d, f.x),
-        f.y
-      );
-    }
-
     void main() {
-      // Smoother base distance calculation
-      float dist = length(vPosition.xy) * 0.15;
+      // Calculate base distance from center
+      float dist = length(vPosition.xy) * 0.1;
       
-      // Smoother swirl effect based on audio level
+      // Create dynamic angle based on position and time
       float angle = atan(vPosition.y, vPosition.x);
-      float swirl = sin(angle * 2.0 + time * (0.4 + audioLevel * 0.3)) * 0.5 + 0.5;
       
-      // Layered smooth noise for more organic movement
-      vec2 noiseCoord = vPosition.xy * 0.2 + time * 0.05;
-      float noisePattern = smoothNoise(noiseCoord) * 0.3 +
-                          smoothNoise(noiseCoord * 2.0) * 0.15;
+      // Add swirling effect
+      float swirl = sin(angle * 3.0 + time * 0.5) * 0.5 + 0.5;
       
-      // Smoother radial waves with audio response
-      float radialWaves = sin(dist * 5.0 - time) * 0.1 * (1.0 - audioLevel * 0.5);
+      // Create noise pattern
+      vec2 noiseCoord = vPosition.xy * 0.1 + time * 0.05;
+      float noisePattern = noise(noiseCoord) * 0.15;
       
-      // Combine effects with audio-responsive weights
-      float mixFactor = dist + 
-                       swirl * (0.3 + audioLevel * 0.1) + 
-                       noisePattern * (0.2 - audioLevel * 0.1) + 
-                       radialWaves;
+      // Combine different effects for gradient mixing
+      float mixFactor = dist + swirl * 0.3 + noisePattern;
+      mixFactor = clamp(mixFactor, 0.0, 1.0);
       
-      // Smooth clamp
-      mixFactor = smoothstep(0.0, 1.0, mixFactor);
-      
-      // Enhanced multi-step gradient with smoother transitions
+      // Create intermediate colors for more complex gradient
       vec3 colorA = mix(color1, color2, 0.33);
       vec3 colorB = mix(color1, color2, 0.66);
       
+      // Multi-step gradient
       vec3 finalColor;
-      float smoothStep1 = smoothstep(0.0, 0.33, mixFactor);
-      float smoothStep2 = smoothstep(0.33, 0.66, mixFactor);
-      float smoothStep3 = smoothstep(0.66, 1.0, mixFactor);
+      if (mixFactor < 0.33) {
+          finalColor = mix(color1, colorA, mixFactor * 3.0);
+      } else if (mixFactor < 0.66) {
+          finalColor = mix(colorA, colorB, (mixFactor - 0.33) * 3.0);
+      } else {
+          finalColor = mix(colorB, color2, (mixFactor - 0.66) * 3.0);
+      }
       
-      finalColor = mix(color1, colorA, smoothStep1);
-      finalColor = mix(finalColor, colorB, smoothStep2);
-      finalColor = mix(finalColor, color2, smoothStep3);
-      
-      // Gentler pulsing effect
-      float pulse = sin(time * 1.5) * 0.1 + 0.9;
+      // Add subtle pulsing
+      float pulse = sin(time * 2.0) * 0.1 + 0.9;
       finalColor *= pulse;
-      
-      // Smoother color variation
-      finalColor += vec3(sin(time * 0.3) * 0.05);
       
       gl_FragColor = vec4(finalColor, opacity);
       if (gl_FragColor.a < 0.01) discard;
@@ -289,12 +259,6 @@ interface WaveformProps {
    * @range 0-2.0 (recommended)
    */
   speedScale?: number;
-
-  /**
-   * Position of the waveform in 3D space
-   * @default [0, 0, 0]
-   */
-  position?: [number, number, number];
 }
 
 function FilledWaveform({
@@ -311,7 +275,6 @@ function FilledWaveform({
     { frequency: 5, amplitude: 0.2, speed: 0.5 },
     { frequency: 2, amplitude: 0.4, speed: 1.2 },
   ],
-  position = [0, 0, 0],
 }: WaveformProps = {}) {
   const [currentOpacity, setCurrentOpacity] = useState(0);
   const filledRef = useRef<any>(null);
@@ -347,17 +310,12 @@ function FilledWaveform({
     const dataArray = dataArrayRef.current;
     analyserRef.current.getByteTimeDomainData(dataArray);
 
-    // Calculate audio level for both shader and animation
+    // Calculate average audio level
     let audioSum = 0;
     for (let i = 0; i < bufferLength; i++) {
       audioSum += Math.abs(dataArray[i] - 128);
     }
-    const normalizedAudioLevel = audioSum / bufferLength / 128;
     const averageAudio = (audioSum / bufferLength) * audioScale;
-
-    // Update shader uniforms
-    filledRef.current.material.uniforms.time.value = clock.elapsedTime;
-    filledRef.current.material.uniforms.audioLevel.value = normalizedAudioLevel;
 
     // Reduce the audio amplification
     const audioAmplification = 1 + (averageAudio / 128) * 2;
@@ -449,7 +407,7 @@ function FilledWaveform({
   }, []); // Run once on mount
 
   return (
-    <mesh ref={filledRef} position={position}>
+    <mesh ref={filledRef}>
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
@@ -483,8 +441,6 @@ function FilledWaveform({
         opacity={currentOpacity}
         transparent
         side={THREE.DoubleSide}
-        time={0}
-        audioLevel={0}
       />
     </mesh>
   );
@@ -504,7 +460,6 @@ function OutlineWaveform({
     { frequency: 4, amplitude: 0.4, speed: 0.4 },
     { frequency: 3, amplitude: 0.2, speed: 0.6 },
   ],
-  position = [0, 0, 0],
 }: WaveformProps = {}) {
   const [currentOpacity, setCurrentOpacity] = useState(0);
   const lineRef = useRef<any>(null);
@@ -632,7 +587,7 @@ function OutlineWaveform({
   }, []);
 
   return (
-    <lineLoop ref={lineRef} position={position}>
+    <lineLoop ref={lineRef}>
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
@@ -778,53 +733,34 @@ function AudioWaveform({
 }) {
   return (
     <>
-      {/* Outer layer (back) */}
+      {/* Innermost layer - more responsive to audio */}
       <FilledWaveform
-        baseRadius={size * 1.0}
-        color="#c084fc"
-        color2="#7e22ce" // Darker purple for more contrast
-        opacity={0.3}
-        smoothingFactor={0.1}
+        baseRadius={size * 0.9}
+        color="#60a5fa"
+        color2="#1d4ed8" // Darker blue for more contrast
+        opacity={0.4}
+        smoothingFactor={0.2}
         audioScale={audioFactor * 1.25}
-        speedScale={speedFactor * 0.375}
+        speedScale={speedFactor * 0.75}
         pulseScale={pulseScale}
         undulationPattern={[
-          { frequency: 2, amplitude: amplitudeFactor * 0.2, speed: 0.3 },
-          { frequency: 4, amplitude: amplitudeFactor * 0.15, speed: 0.2 },
-          { frequency: 3, amplitude: amplitudeFactor * 0.25, speed: 0.4 },
+          { frequency: 4, amplitude: amplitudeFactor * 0.3, speed: 0.5 },
+          { frequency: 6, amplitude: amplitudeFactor * 0.2, speed: 0.3 },
+          { frequency: 2, amplitude: amplitudeFactor * 0.3, speed: 0.4 },
         ]}
-        position={[0, 0, -0.5]} // Furthest back, but in front of its outline
-      />
-
-      <FilledWaveform
-        baseRadius={size * 1.5}
-        color="#fff"
-        color2="#000" // Darker purple for more contrast
-        opacity={0.15}
-        smoothingFactor={0.1}
-        audioScale={audioFactor * 1.25}
-        speedScale={speedFactor * 0.375}
-        pulseScale={pulseScale}
-        undulationPattern={[
-          { frequency: 2, amplitude: amplitudeFactor * 0.2, speed: 0.3 },
-          { frequency: 4, amplitude: amplitudeFactor * 0.15, speed: 0.2 },
-          { frequency: 3, amplitude: amplitudeFactor * 0.25, speed: 0.4 },
-        ]}
-        position={[0, 0, -0.2]} // Furthest back, but in front of its outline
       />
       <OutlineWaveform
-        baseRadius={size * 0.975}
+        baseRadius={size * 0.875}
         color="#fff"
-        opacity={0.25}
-        smoothingFactor={0.08}
-        audioScale={audioFactor * 1.75}
+        opacity={1}
+        smoothingFactor={0.15}
+        audioScale={audioFactor * 2}
         pulseScale={pulseScale}
         undulationPattern={[
-          { frequency: 2, amplitude: amplitudeFactor * 0.25, speed: 1.2 },
-          { frequency: 3, amplitude: amplitudeFactor * 0.3, speed: 0.3 },
-          { frequency: 4, amplitude: amplitudeFactor * 0.15, speed: 0.5 },
+          { frequency: 3, amplitude: amplitudeFactor * 0.3, speed: 1.6 },
+          { frequency: 5, amplitude: amplitudeFactor * 0.3, speed: 0.5 },
+          { frequency: 2, amplitude: amplitudeFactor * 0.2, speed: 0.8 },
         ]}
-        position={[0, 0, -0.6]} // Behind its fill
       />
 
       {/* Middle layer */}
@@ -842,7 +778,6 @@ function AudioWaveform({
           { frequency: 5, amplitude: amplitudeFactor * 0.2, speed: 0.3 },
           { frequency: 2, amplitude: amplitudeFactor * 0.4, speed: 0.5 },
         ]}
-        position={[0, 0, -0.3]} // Middle, but in front of its outline
       />
       <OutlineWaveform
         baseRadius={size * 0.925}
@@ -856,39 +791,36 @@ function AudioWaveform({
           { frequency: 4, amplitude: amplitudeFactor * 0.4, speed: 0.4 },
           { frequency: 3, amplitude: amplitudeFactor * 0.2, speed: 0.6 },
         ]}
-        position={[0, 0, -0.4]} // Behind its fill
       />
 
-      {/* Innermost layer (front) */}
+      {/* Outer layer */}
       <FilledWaveform
-        baseRadius={size * 0.9}
-        color="#60a5fa"
-        color2="#1d4ed8" // Darker blue for more contrast
-        opacity={0.4}
-        smoothingFactor={0.2}
+        baseRadius={size * 1.0}
+        color="#c084fc"
+        color2="#7e22ce" // Darker purple for more contrast
+        opacity={0.3}
+        smoothingFactor={0.1}
         audioScale={audioFactor * 1.25}
-        speedScale={speedFactor * 0.75}
+        speedScale={speedFactor * 0.375}
         pulseScale={pulseScale}
         undulationPattern={[
-          { frequency: 4, amplitude: amplitudeFactor * 0.3, speed: 0.5 },
-          { frequency: 6, amplitude: amplitudeFactor * 0.2, speed: 0.3 },
-          { frequency: 2, amplitude: amplitudeFactor * 0.3, speed: 0.4 },
+          { frequency: 2, amplitude: amplitudeFactor * 0.2, speed: 0.3 },
+          { frequency: 4, amplitude: amplitudeFactor * 0.15, speed: 0.2 },
+          { frequency: 3, amplitude: amplitudeFactor * 0.25, speed: 0.4 },
         ]}
-        position={[0, 0, -0.1]} // Front, but in front of its outline
       />
       <OutlineWaveform
-        baseRadius={size * 0.875}
+        baseRadius={size * 0.975}
         color="#fff"
-        opacity={0.2}
-        smoothingFactor={0.15}
-        audioScale={audioFactor * 2}
+        opacity={0.25}
+        smoothingFactor={0.08}
+        audioScale={audioFactor * 1.75}
         pulseScale={pulseScale}
         undulationPattern={[
-          { frequency: 3, amplitude: amplitudeFactor * 0.3, speed: 1.6 },
-          { frequency: 5, amplitude: amplitudeFactor * 0.3, speed: 0.5 },
-          { frequency: 2, amplitude: amplitudeFactor * 0.2, speed: 0.8 },
+          { frequency: 2, amplitude: amplitudeFactor * 0.25, speed: 1.2 },
+          { frequency: 3, amplitude: amplitudeFactor * 0.3, speed: 0.3 },
+          { frequency: 4, amplitude: amplitudeFactor * 0.15, speed: 0.5 },
         ]}
-        position={[0, 0, -0.2]} // Behind its fill
       />
     </>
   );
